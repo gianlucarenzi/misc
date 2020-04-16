@@ -5,6 +5,6 @@ ARCHITECTURE=`gcc -dumpmachine`
 reset
 echo
 echo "Compiling on $DISTRIBUTION for $ARCHITECTURE"
-echo 
+echo
 make DISTRO=$DISTRIBUTION ARCH=$ARCHITECTURE clean
 make DISTRO=$DISTRIBUTION ARCH=$ARCHITECTURE all
