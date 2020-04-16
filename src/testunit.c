@@ -85,6 +85,7 @@ typedef enum {
 
 	// MASTER STATES
 	STATE_SEND_COMMAND,
+	STATE_SEND_BREAK,
 	STATE_WAIT_COMMAND_ACK,
 	STATE_WRITE_SERIAL_PACKET,
 	STATE_WAIT_SERIAL_PACKET_ACK,
@@ -111,6 +112,7 @@ static const char *state_name[] = {
 
 	// MASTER STATES
 	[STATE_SEND_COMMAND] = "STATE_SEND_COMMAND",
+	[STATE_SEND_BREAK] = "STATE_SEND_BREAK",
 	[STATE_WAIT_COMMAND_ACK] = "STATE_WAIT_COMMAND_ACK",
 	[STATE_WRITE_SERIAL_PACKET] = "STATE_WRITE_SERIAL_PACKET",
 	[STATE_WRITE_SERIAL_PACKET_SIGNATURE_MASTER] = "STATE_WRITE_SERIAL_PACKET_SIGNATURE_MASTER",
@@ -373,13 +375,39 @@ static void *serial_2_pthread(void *data)
 					if (rval == 0)
 					{
 						THREAD_NOISY("Nothing to read within %ld msecs\n", timeout);
-						THREAD_VERBOSE("\t\t*** NOW MASTER ***\n");
-						state_next = STATE_SEND_COMMAND;
+						THREAD_VERBOSE("\t\t*** NOW SEND BREAK ***\n");
+						state_next = STATE_SEND_BREAK;
 					}
 					else
 					{
 						THREAD_NOISY("Read %d from serial.\n", rval);
 						state_next = STATE_COMMAND_RECEIVED;
+					}
+				}
+				break;
+
+			case STATE_SEND_BREAK:
+				rval = serial_send_break(serfd);
+				if (rval < 0)
+				{
+					if (errno != EAGAIN && errno != EINTR)
+					{
+						THREAD_ERROR("Error on SENDING BREAK COMMAND\n");
+						state_next = STATE_RESET;
+					}
+					// Se siamo stati interrotti ci riproviamo
+				}
+				else
+				{
+					if (rval == 0)
+					{
+						THREAD_VERBOSE("\t\t*** NOW MASTER ***\n");
+						state_next = STATE_SEND_COMMAND;
+					}
+					else
+					{
+						THREAD_ERROR("SEND BREAK - IS THIS A BUG??? rval: %d\n", rval);
+						state_next = STATE_RESET;
 					}
 				}
 				break;
@@ -1151,13 +1179,39 @@ int main(int argc, char *argv[])
 					if (rval == 0)
 					{
 						DBG_N("Nothing to read within %ld msecs\n", timeout);
-						DBG_V("\t\t*** NOW MASTER ***\n");
-						state_next = STATE_SEND_COMMAND;
+						DBG_V("\t\t*** NOW SEND BREAK ***\n");
+						state_next = STATE_SEND_BREAK;
 					}
 					else
 					{
 						DBG_N("Read %d from serial.\n", rval);
 						state_next = STATE_COMMAND_RECEIVED;
+					}
+				}
+				break;
+
+			case STATE_SEND_BREAK:
+				rval = serial_send_break(serfd);
+				if (rval < 0)
+				{
+					if (errno != EAGAIN && errno != EINTR)
+					{
+						DBG_E("Error on SENDING BREAK COMMAND\n");
+						state_next = STATE_RESET;
+					}
+					// Se siamo stati interrotti ci riproviamo
+				}
+				else
+				{
+					if (rval == 0)
+					{
+						DBG_V("\t\t*** NOW MASTER ***\n");
+						state_next = STATE_SEND_COMMAND;
+					}
+					else
+					{
+						DBG_E("SEND BREAK -- IS THIS A BUG??? rval: %d\n", rval);
+						state_next = STATE_RESET;
 					}
 				}
 				break;

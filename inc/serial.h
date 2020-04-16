@@ -7,6 +7,7 @@
 extern int serial_device_init(const char *name, int baudrate, int pre, int post);
 extern int serial_device_reset(int fd, int baudrate, int pre, int post);
 extern void serial_device_status(int fd);
+extern int serial_send_break(int fd);
 
 // String oriented functions (EOL /r/n terminated)
 extern int serial_send_string(int fd, const unsigned char *string);

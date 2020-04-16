@@ -156,6 +156,15 @@ int serial_device_init(const char *name, int baudrate, int pre, int post)
 	return fd;
 }
 
+int serial_send_break(int fd)
+{
+	int rval = 0;
+	DRIVER_NOISY("Enter with: FD: %d\n", fd);
+	// Send BREAK
+	rval = tcsendbreak(fd, 250);
+	return rval;
+}
+
 int serial_device_reset(int fd, int baudrate, int pre, int post)
 {
 	struct termios term;
