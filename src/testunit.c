@@ -253,7 +253,7 @@ static inline void fill(unsigned char *buf, const char *str, size_t len, int tim
 	int z;
 	for (z = 0; z < times; z++)
 	{
-		strncpy((char *) buf, (char *) str, len);
+		memcpy((char *) buf, (char *) str, len);
 		buf += len;
 	}
 }
@@ -312,6 +312,48 @@ static inline void fillbuffer(unsigned char *buf, size_t len, int baudrate)
 	//print_hex_ascii_line(buf,strlen( (const char *) buf), 0);
 }
 
+static void *break_pthread(void *data)
+{
+	int * ptr = (int *) data;
+	int serial[2];
+	int rnd;
+	int idx;
+	int rval;
+
+	serial[0] = *(ptr++);
+	serial[1] = *(ptr);
+
+	THREAD_PRINT("Enter: Port1 FD: %d - Port2 FD: %d\n",
+		serial[0], serial[1]);
+
+	srand(time(NULL));
+
+	for (;;)
+	{
+		// Ogni tanto inseriamo un break per simulare un disturbo di
+		// rete/cablaggio. Per verificare che venga letto correttamente
+		// e che il protocollo si riprenda di conseguenza
+		rnd = (rand() % 20 + 1) * 1000L;  // millisecondi
+		idx = rand() % 2;                 // sceglie tra le due seriali
+		usleep(rnd * 1000L);
+		rval = serial_send_break(serial[idx]);
+		if (rval < 0)
+		{
+			THREAD_ERROR("Unable to send break\n");
+		}
+		else
+		{
+			THREAD_PRINT("*** Sending BREAK signal to Port %d FH: %d ***\n",
+				idx, serial[idx]);
+		}
+	}
+
+outBreakThread:
+	// cleanup
+	THREAD_NOISY("Exit\n");
+	return NULL;
+}
+
 static void *serial_2_pthread(void *data)
 {
 	t_port port = *((t_port *) data);
@@ -341,7 +383,7 @@ static void *serial_2_pthread(void *data)
 	pre = port.pre;
 	post = port.post;
 
-	THREAD_NOISY("Enter: Port: fd: %d - BaudRate: %d PRE: %d - POST: %d\n",
+	THREAD_PRINT("Enter: Port: fd: %d - BaudRate: %d PRE: %d - POST: %d\n",
 		serfd, baudrate2, pre, post);
 
 	for (;;)
@@ -1036,12 +1078,15 @@ int main(int argc, char *argv[])
 	int goodpackettx = 0;
 	int goodpacketrx = 0;
 	pthread_t serial2Thread;
+	pthread_t breakThread;
 	int theThread;
+	int theBreakThread;
 	int pre1, pre2;
 	int post1, post2;
 	int pre, post;
 	t_port port1;
 	t_port port2;
+	int fhandle[2];
 
 	t_signature signatureread;
 	signatureread.header = SERIAL_SIGNATURE_HEADER;
@@ -1111,6 +1156,7 @@ int main(int argc, char *argv[])
 		port1.baudrate = baudrate1;
 		pre = pre1;
 		post = post1;
+		DBG_I("Serial Port 1 File Handle: %d\n", port1.fd);
 	}
 
 	ser2fd = serial_device_init(device2, baudrate2, pre2, post2);
@@ -1125,6 +1171,7 @@ int main(int argc, char *argv[])
 		port2.baudrate = baudrate2;
 		port2.pre = pre2;
 		port2.post = post2;
+		DBG_I("Serial Port 2 File Handle: %d\n", port2.fd);
 	}
 
 	DBG_I("Creating mutexLock\n");
@@ -1143,6 +1190,16 @@ int main(int argc, char *argv[])
 	if (theThread < 0)
 	{
 		DBG_E("Cannot create thread modem\n");
+		goto out;
+	}
+
+	DBG_I("Initialize pthread for break\n");
+	fhandle[0] = port1.fd;
+	fhandle[1] = port2.fd;
+	theBreakThread = pthread_create( &breakThread, NULL, break_pthread, &fhandle );
+	if (theBreakThread < 0)
+	{
+		DBG_E("Cannot create thread for break\n");
 		goto out;
 	}
 
